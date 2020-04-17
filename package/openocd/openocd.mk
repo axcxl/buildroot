@@ -4,12 +4,12 @@
 #
 ################################################################################
 
-OPENOCD_VERSION = 0.10.0
-OPENOCD_SOURCE = openocd-$(OPENOCD_VERSION).tar.bz2
-OPENOCD_SITE = http://sourceforge.net/projects/openocd/files/openocd/$(OPENOCD_VERSION)
+OPENOCD_SITE = https://git.code.sf.net/p/openocd/code
+OPENOCD_VERSION = 21b9a0e1
+OPENOCD_SITE_METHOD = git
+OPENOCD_GIT_SUBMODULES = YES
 OPENOCD_LICENSE = GPL-2.0+
 OPENOCD_LICENSE_FILES = COPYING
-# 0002-configure-enable-build-on-uclinux.patch patches configure.ac
 OPENOCD_AUTORECONF = YES
 OPENOCD_CONF_ENV = CFLAGS="$(TARGET_CFLAGS) -std=gnu99"
 
@@ -103,20 +103,6 @@ HOST_OPENOCD_CONF_OPTS = \
 	--disable-werror
 
 HOST_OPENOCD_DEPENDENCIES = host-jimtcl host-libftdi host-libusb host-libusb-compat
-
-# Avoid documentation rebuild. On PowerPC64(le), we patch the
-# configure script. Due to this, the version.texi files gets
-# regenerated, and then since it has a newer date than openocd.info,
-# openocd build system rebuilds the documentation. Unfortunately, this
-# documentation rebuild fails on old machines. We work around this by
-# faking the date of the generated version.texi file, to make the
-# build system believe the documentation doesn't need to be
-# regenerated.
-define OPENOCD_FIX_VERSION_TEXI
-	touch -r $(@D)/doc/openocd.info $(@D)/doc/version.texi
-endef
-OPENOCD_POST_BUILD_HOOKS += OPENOCD_FIX_VERSION_TEXI
-HOST_OPENOCD_POST_BUILD_HOOKS += OPENOCD_FIX_VERSION_TEXI
 
 $(eval $(autotools-package))
 $(eval $(host-autotools-package))
