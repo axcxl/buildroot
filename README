@@ -6,6 +6,7 @@ example with ser2net)
 on the boot partition, with these names)
 - added transfer of .git folders from rootfs overlays (need to put a working 
 git repository in the rootfs overlay)
+- enable root login by default for OpenSSH (WARNING: not safe!)
 
 Tested on:
 - old Raspberry Pi B (yes, original version of Raspberry Pi, 512MB RAM)
