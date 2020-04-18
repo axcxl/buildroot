@@ -88,4 +88,11 @@ endef
 
 OPENSSH_POST_INSTALL_TARGET_HOOKS += OPENSSH_INSTALL_SSH_COPY_ID
 
+#WARNING: NOT SAFE! But this RPi is used in a private network, with no outside access
+define OPENSSH_ALLOW_ROOT_LOGIN
+	$(SED) 's/\#PermitRootLogin prohibit-password/PermitRootLogin yes/' $(TARGET_DIR)/etc/ssh/sshd_config
+endef
+
+OPENSSH_POST_INSTALL_TARGET_HOOKS += OPENSSH_ALLOW_ROOT_LOGIN
+	
 $(eval $(autotools-package))
