@@ -7,6 +7,7 @@ BOARD_NAME="$(basename ${BOARD_DIR})"
 GENIMAGE_CFG="${BOARD_DIR}/genimage-${BOARD_NAME}.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
 
+echo "$@"
 for arg in "$@"
 do
 	case "${arg}" in
@@ -36,6 +37,11 @@ __EOF__
 		gpu_mem="${arg:2}"
 		sed -e "/^${gpu_mem%=*}=/s,=.*,=${gpu_mem##*=}," -i "${BINARIES_DIR}/rpi-firmware/config.txt"
 		;;
+        --disable-kernel-ttyama0)
+        # Do NOT put kernel console on ttyAMA0. This way rpi can talk to other devices using this console
+        echo "Disabling kernel ouput on ttyAMA0. NO LOGIN CONSOLE PRESENT!"
+	    sed -e 's/console=ttyAMA0,115200//' -i "${BINARIES_DIR}/rpi-firmware/cmdline.txt"
+        ;;
 	esac
 
 done
