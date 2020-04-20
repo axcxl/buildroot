@@ -1,0 +1,76 @@
+# Raspberry Pi Zero W motion activated camera experiment
+#
+# NOTES:
+#  - ttyAMA0 is used as kernel login as a backup in case of wifi problems
+#  - uses GLIB C to have vcgencmd 
+#
+# CONTAINS:
+#  - Openssh with root login enabled (allow sshfs mounts)
+#  - WPA Supplicant
+#  - Motion (still experimenting)
+#  - SNTP for proper time setting
+#  - RNG-TOOLS needed to get it to finish booting faster
+# 
+# ROOTFS used (~77MB on device): 
+#  - /etc/init.d/S00modprobe, with a single line: "modprobe brcmfmac" to load the wifi module
+#  - make sure S00modprobe is executable
+#  - /etc/wpa_supplicant.conf with wifi login info (use model from here:
+#    https://www.raspberrypi.org/documentation/configuration/wireless/wireless-cli.md )
+#  - /etc/network/interfaces:
+#       auto wlan0
+#       iface wlan0 inet dhcp
+#           pre-up wpa_supplicant -D nl80211 -i wlan0 -c /etc/wpa_supplicant.conf -B
+#           post-down killall -q wpa_supplicant
+# 
+# HOW TO USE: 
+# - cp rpi0w_camera ../.config 
+# - make menuconfig
+# - make all
+#
+
+BR2_arm=y
+BR2_arm1176jzf_s=y
+BR2_DL_DIR="../downloads"
+BR2_CCACHE=y
+BR2_CCACHE_DIR="../ccache"
+BR2_TOOLCHAIN_BUILDROOT_GLIBC=y
+BR2_PACKAGE_HOST_LINUX_HEADERS_CUSTOM_4_19=y
+BR2_TOOLCHAIN_BUILDROOT_CXX=y
+BR2_TARGET_GENERIC_HOSTNAME="customrpi0"
+BR2_TARGET_GENERIC_ISSUE="Welcome to extra-light ZeroW!"
+BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_MDEV=y
+BR2_TARGET_GENERIC_ROOT_PASSWD="customrpi0"
+BR2_ROOTFS_OVERLAY="../overlay_rootfs_camera"
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/raspberrypi0w/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="board/raspberrypi0w/post-image.sh"
+BR2_ROOTFS_POST_SCRIPT_ARGS="--add-miniuart-bt-overlay"
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,4f2a4cc501c428c940549f39d5562e60404ac4f7)/linux-4f2a4cc501c428c940549f39d5562e60404ac4f7.tar.gz"
+BR2_LINUX_KERNEL_DEFCONFIG="bcmrpi"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="bcm2708-rpi-zero-w"
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
+BR2_PACKAGE_MOTION=y
+BR2_PACKAGE_RPI_FIRMWARE=y
+BR2_PACKAGE_RPI_FIRMWARE_X=y
+BR2_PACKAGE_RPI_FIRMWARE_INSTALL_VCDBG=y
+BR2_PACKAGE_RPI_WIFI_FIRMWARE=y
+BR2_PACKAGE_PIGPIO=y
+BR2_PACKAGE_RASPI_GPIO=y
+BR2_PACKAGE_RNG_TOOLS=y
+BR2_PACKAGE_DHCPCD=y
+BR2_PACKAGE_NTP=y
+BR2_PACKAGE_NTP_SNTP=y
+# BR2_PACKAGE_NTP_NTPD is not set
+BR2_PACKAGE_OPENSSH=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_NANO=y
+# BR2_PACKAGE_NANO_TINY is not set
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+BR2_TARGET_ROOTFS_EXT2_SIZE="1024M"
+# BR2_TARGET_ROOTFS_TAR is not set
+BR2_PACKAGE_HOST_DOSFSTOOLS=y
+BR2_PACKAGE_HOST_GENIMAGE=y
+BR2_PACKAGE_HOST_MTOOLS=y
