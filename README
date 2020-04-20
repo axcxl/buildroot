@@ -1,7 +1,8 @@
 Changes done:
 - OpenOCD updated to latest git version (0.10.0 is old)
 - serial console modified to be used for controlling other devices (for 
-example with ser2net)
+example with ser2net). This is configurable and controlled by passing
+"--disable-kernel-ttyama0" to the post-image.sh script
 - fixed booting with gpu_mem=16 (needed the start_cd.elf and fixup_cd.dat 
 on the boot partition, with these names)
 - added transfer of .git folders from rootfs overlays (need to put a working 
@@ -10,6 +11,7 @@ git repository in the rootfs overlay)
 
 Tested on:
 - old Raspberry Pi B (yes, original version of Raspberry Pi, 512MB RAM)
+- Raspberry Pi Zero W (NOTE: add rng-tools, otherwise boot takes a loooooong time)
 
 ---------------------------------------------------------------------------
 
