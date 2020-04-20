@@ -1,6 +1,24 @@
 # Small dev board configuration for GPIO monitoring and OpenOCD access via GPIO pins and JLink
+#
+# NOTES:
+#  - designed to run headless, RAM is maximized by lowering the GPU memory allocation as much as possible
+#  - ttyAMA0 is not used for kernel login, but for controlling other devices
+#
+# CONTAINS:
+#  - Ser2net
+#  - Openssh with root login enabled (allow sshfs mounts)
+#  - OpenOCD with a few devices compiled (JLink, GPIO, Bus Blaster)
+#  - Python 2
+#  - SNTP for proper time setting
+#  - Git to manage the repository
+#  - A few tools (iperf, scapy, rsync, etc), just experimenting
 # 
-# To use: 
+# ROOTFS used: 
+#   - a git repository with OpenOCD scripts
+#   - one sym link to OpenOCD folder 
+#   - ser2net config file
+# 
+# HOW TO USE: 
 # - cp rpi1_dev ../.config 
 # - make menuconfig
 # - make all
@@ -19,10 +37,10 @@ BR2_TARGET_GENERIC_HOSTNAME="customrpi"
 BR2_TARGET_GENERIC_ISSUE="Welcome to Raspberry Pi, extra-light edition!"
 BR2_TARGET_GENERIC_ROOT_PASSWD="customrpi"
 BR2_SYSTEM_DHCP="eth0"
-BR2_ROOTFS_OVERLAY="../overlay_rootfs"
+BR2_ROOTFS_OVERLAY="../overlay_rootfs_dev"
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/raspberrypi/post-build.sh"
 BR2_ROOTFS_POST_IMAGE_SCRIPT="board/raspberrypi/post-image.sh"
-BR2_ROOTFS_POST_SCRIPT_ARGS="--gpu_mem_256=16 --gpu_mem_512=16 --gpu_mem_1024=16"
+BR2_ROOTFS_POST_SCRIPT_ARGS="--gpu_mem_256=16 --gpu_mem_512=16 --gpu_mem_1024=16 --disable-kernel-ttyama0"
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,4f2a4cc501c428c940549f39d5562e60404ac4f7)/linux-4f2a4cc501c428c940549f39d5562e60404ac4f7.tar.gz"
