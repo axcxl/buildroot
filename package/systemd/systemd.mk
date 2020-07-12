@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-SYSTEMD_VERSION = 245.4
+SYSTEMD_VERSION = 245.6
 SYSTEMD_SITE = $(call github,systemd,systemd-stable,v$(SYSTEMD_VERSION))
 SYSTEMD_LICENSE = LGPL-2.1+, GPL-2.0+ (udev), Public Domain (few source files, see README), BSD-3-Clause (tools/chromiumos)
 SYSTEMD_LICENSE_FILES = LICENSE.GPL2 LICENSE.LGPL2.1 README tools/chromiumos/LICENSE
@@ -47,6 +47,13 @@ SYSTEMD_DEPENDENCIES += acl
 SYSTEMD_CONF_OPTS += -Dacl=true
 else
 SYSTEMD_CONF_OPTS += -Dacl=false
+endif
+
+ifeq ($(BR2_PACKAGE_LIBAPPARMOR),y)
+SYSTEMD_DEPENDENCIES += libapparmor
+SYSTEMD_CONF_OPTS += -Dapparmor=true
+else
+SYSTEMD_CONF_OPTS += -Dapparmor=false
 endif
 
 ifeq ($(BR2_PACKAGE_AUDIT),y)
@@ -207,6 +214,7 @@ endif
 
 ifeq ($(BR2_PACKAGE_SYSTEMD_JOURNAL_REMOTE),y)
 SYSTEMD_CONF_OPTS += -Dremote=true
+SYSTEMD_REMOTE_USER = systemd-journal-remote -1 systemd-journal-remote -1 * - - - systemd Journal Remote
 else
 SYSTEMD_CONF_OPTS += -Dremote=false
 endif
@@ -350,7 +358,7 @@ endif
 
 ifeq ($(BR2_PACKAGE_SYSTEMD_COREDUMP),y)
 SYSTEMD_CONF_OPTS += -Dcoredump=true
-SYSTEMD_COREDUMP_USER = systemd-coredump -1 systemd-coredump -1 * /var/lib/systemd/coredump - - Core Dumper
+SYSTEMD_COREDUMP_USER = systemd-coredump -1 systemd-coredump -1 * - - - systemd core dump processing
 else
 SYSTEMD_CONF_OPTS += -Dcoredump=false
 endif
@@ -370,7 +378,7 @@ endif
 
 ifeq ($(BR2_PACKAGE_SYSTEMD_NETWORKD),y)
 SYSTEMD_CONF_OPTS += -Dnetworkd=true
-SYSTEMD_NETWORKD_USER = systemd-network -1 systemd-network -1 * - - - Network Manager
+SYSTEMD_NETWORKD_USER = systemd-network -1 systemd-network -1 * - - - systemd Network Management
 SYSTEMD_NETWORKD_DHCP_IFACE = $(call qstrip,$(BR2_SYSTEM_DHCP))
 ifneq ($(SYSTEMD_NETWORKD_DHCP_IFACE),)
 define SYSTEMD_INSTALL_NETWORK_CONFS
@@ -389,7 +397,7 @@ define SYSTEMD_INSTALL_RESOLVCONF_HOOK
 		$(TARGET_DIR)/etc/resolv.conf
 endef
 SYSTEMD_CONF_OPTS += -Dnss-resolve=true -Dresolve=true
-SYSTEMD_RESOLVED_USER = systemd-resolve -1 systemd-resolve -1 * - - - Network Name Resolution Manager
+SYSTEMD_RESOLVED_USER = systemd-resolve -1 systemd-resolve -1 * - - - systemd Resolver
 else
 SYSTEMD_CONF_OPTS += -Dnss-resolve=false -Dresolve=false
 endif
@@ -406,7 +414,7 @@ endif
 
 ifeq ($(BR2_PACKAGE_SYSTEMD_TIMESYNCD),y)
 SYSTEMD_CONF_OPTS += -Dtimesyncd=true
-SYSTEMD_TIMESYNCD_USER = systemd-timesync -1 systemd-timesync -1 * - - - Network Time Synchronization
+SYSTEMD_TIMESYNCD_USER = systemd-timesync -1 systemd-timesync -1 * - - - systemd Time Synchronization
 else
 SYSTEMD_CONF_OPTS += -Dtimesyncd=false
 endif
@@ -479,10 +487,7 @@ define SYSTEMD_USERS
 	- - systemd-journal -1 * - - - Journal
 	- - render -1 * - - - DRI rendering nodes
 	- - kvm -1 * - - - kvm nodes
-	systemd-bus-proxy -1 systemd-bus-proxy -1 * - - - Proxy D-Bus messages to/from a bus
-	systemd-journal-gateway -1 systemd-journal-gateway -1 * /var/log/journal - - Journal Gateway
-	systemd-journal-remote -1 systemd-journal-remote -1 * /var/log/journal/remote - - Journal Remote
-	systemd-journal-upload -1 systemd-journal-upload -1 * - - - Journal Upload
+	$(SYSTEMD_REMOTE_USER)
 	$(SYSTEMD_COREDUMP_USER)
 	$(SYSTEMD_NETWORKD_USER)
 	$(SYSTEMD_RESOLVED_USER)
@@ -490,37 +495,42 @@ define SYSTEMD_USERS
 endef
 
 ifneq ($(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)),)
-# systemd needs getty.service for VTs and serial-getty.service for serial ttys
-# note that console-getty.service should be used on /dev/console as it should not have dependencies
-# also patch the file to use the correct baud-rate, the default baudrate is 115200 so look for that
+# systemd provides multiple units to autospawn getty as neede
+# * getty@.service to start a getty on normal TTY
+# * sertial-getty@.service to start a getty on serial lines
+# * console-getty.service for generic /dev/console
+# * container-getty@.service for a getty on /dev/pts/*
 #
-# systemd defaults to only have getty@tty.service enabled
-# * DefaultInstance=tty1 in getty@service
-# * no DefaultInstance in serial-getty@.service
-# * WantedBy=getty.target in console-getty.service
-# * console-getty is not enabled because of 90-systemd.preset
-# We want "systemctl preset-all" to do the right thing, even when run on the target after boot
-# * remove the default instance of getty@.service via a drop-in in /usr/lib
-# * set a new DefaultInstance for getty@.service instead, if needed
-# * set a new DefaultInstance for serial-getty@.service, if needed
-# * override the systemd-provided preset for console-getty.service if needed
+# the generator systemd-getty-generator will
+# * read the console= kernel command line parameter
+# * enable one of the above units depending on what it finds
+#
+# Systemd defaults to enablinb getty@tty1.service
+#
+# What we want to do
+# * Enable a getty on $BR2_TARGET_GENERIC_TTY_PATH
+# * Set the baudrate for all units according to BR2_TARGET_GENERIC_GETTY_BAUDRATE
+# * Always enable a getty on the console using systemd-getty-generator
+#   (backward compatibility with previous releases of buildroot)
+#
+# What we do
+# * disable getty@tty1 (enabled by upstream systemd)
+# * enable getty@xxx if  $BR2_TARGET_GENERIC_TTY_PATH is a tty
+# * enable serial-getty@xxx for other $BR2_TARGET_GENERIC_TTY_PATH
+# * rewrite baudrates if a baudrate is provided
 define SYSTEMD_INSTALL_SERVICE_TTY
 	mkdir $(TARGET_DIR)/usr/lib/systemd/system/getty@.service.d; \
 	printf '[Install]\nDefaultInstance=\n' \
 		>$(TARGET_DIR)/usr/lib/systemd/system/getty@.service.d/buildroot-console.conf; \
 	if [ $(BR2_TARGET_GENERIC_GETTY_PORT) = "console" ]; \
 	then \
-		TARGET="console-getty.service"; \
-		printf 'enable console-getty.service\n' \
-			>$(TARGET_DIR)/usr/lib/systemd/system-preset/81-buildroot-tty.preset; \
+		: ; \
 	elif echo $(BR2_TARGET_GENERIC_GETTY_PORT) | egrep -q 'tty[0-9]*$$'; \
 	then \
-		TARGET="getty@.service"; \
 		printf '[Install]\nDefaultInstance=%s\n' \
 			$(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)) \
 			>$(TARGET_DIR)/usr/lib/systemd/system/getty@.service.d/buildroot-console.conf; \
 	else \
-		TARGET="serial-getty@.service"; \
 		mkdir $(TARGET_DIR)/usr/lib/systemd/system/serial-getty@.service.d;\
 		printf '[Install]\nDefaultInstance=%s\n' \
 			$(call qstrip,$(BR2_TARGET_GENERIC_GETTY_PORT)) \
@@ -528,7 +538,10 @@ define SYSTEMD_INSTALL_SERVICE_TTY
 	fi; \
 	if [ $(call qstrip,$(BR2_TARGET_GENERIC_GETTY_BAUDRATE)) -gt 0 ] ; \
 	then \
-		$(SED) 's,115200,$(BR2_TARGET_GENERIC_GETTY_BAUDRATE),' $(TARGET_DIR)/lib/systemd/system/$${TARGET}; \
+		$(SED) 's/115200/$(BR2_TARGET_GENERIC_GETTY_BAUDRATE),115200/' $(TARGET_DIR)/lib/systemd/system/getty@.service; \
+		$(SED) 's/115200/$(BR2_TARGET_GENERIC_GETTY_BAUDRATE),115200/' $(TARGET_DIR)/lib/systemd/system/serial-getty@.service; \
+		$(SED) 's/115200/$(BR2_TARGET_GENERIC_GETTY_BAUDRATE),115200/' $(TARGET_DIR)/lib/systemd/system/console-getty@.service; \
+		$(SED) 's/115200/$(BR2_TARGET_GENERIC_GETTY_BAUDRATE),115200/' $(TARGET_DIR)/lib/systemd/system/container-getty@.service; \
 	fi
 endef
 endif
@@ -546,10 +559,19 @@ endef
 define SYSTEMD_PRESET_ALL
 	$(HOST_DIR)/bin/systemctl --root=$(TARGET_DIR) preset-all
 endef
-SYSTEMD_TARGET_FINALIZE_HOOKS += SYSTEMD_PRESET_ALL
+SYSTEMD_ROOTFS_PRE_CMD_HOOKS += SYSTEMD_PRESET_ALL
 
 SYSTEMD_CONF_ENV = $(HOST_UTF8_LOCALE_ENV)
 SYSTEMD_NINJA_ENV = $(HOST_UTF8_LOCALE_ENV)
+
+define SYSTEMD_LINUX_CONFIG_FIXUPS
+	$(call KCONFIG_ENABLE_OPT,CONFIG_CGROUPS)
+	$(call KCONFIG_ENABLE_OPT,CONFIG_INOTIFY_USER)
+	$(call KCONFIG_ENABLE_OPT,CONFIG_FHANDLE)
+	$(call KCONFIG_ENABLE_OPT,CONFIG_AUTOFS4_FS)
+	$(call KCONFIG_ENABLE_OPT,CONFIG_TMPFS_POSIX_ACL)
+	$(call KCONFIG_ENABLE_OPT,CONFIG_TMPFS_XATTR)
+endef
 
 # We need a very minimal host variant, so we disable as much as possible.
 HOST_SYSTEMD_CONF_OPTS = \
@@ -619,6 +641,8 @@ HOST_SYSTEMD_DEPENDENCIES = \
 	host-libcap \
 	host-gperf
 
+HOST_SYSTEMD_NINJA_ENV = DESTDIR=$(HOST_DIR)
+
 # Fix RPATH After installation
 # * systemd provides a install_rpath instruction to meson because the binaries
 #   need to link with libsystemd which is not in a standard path
@@ -627,20 +651,14 @@ HOST_SYSTEMD_DEPENDENCIES = \
 # * the original path had been tweaked by buildroot via LDFLAGS to add
 #   $(HOST_DIR)/lib
 # * thus re-tweak rpath after the installation for all binaries that need it
-HOST_SYSTEMD_HOST_TOOLS = \
-	systemd-analyze \
-	systemd-machine-id-setup \
-	systemd-mount \
-	systemd-nspawn \
-	systemctl \
-	udevadm
-
-HOST_SYSTEMD_NINJA_ENV = DESTDIR=$(HOST_DIR)
+HOST_SYSTEMD_HOST_TOOLS = busctl journalctl systemctl systemd-* udevadm
 
 define HOST_SYSTEMD_FIX_RPATH
-	$(foreach f,$(HOST_SYSTEMD_HOST_TOOLS), \
-		$(HOST_DIR)/bin/patchelf --set-rpath $(HOST_DIR)/lib:$(HOST_DIR)/lib/systemd $(HOST_DIR)/bin/$(f)
-	)
+	for f in $(addprefix $(HOST_DIR)/bin/,$(HOST_SYSTEMD_HOST_TOOLS)); do \
+		[ -e $$f ] || continue; \
+		$(HOST_DIR)/bin/patchelf --set-rpath $(HOST_DIR)/lib:$(HOST_DIR)/lib/systemd $${f} \
+		|| exit 1; \
+	done
 endef
 HOST_SYSTEMD_POST_INSTALL_HOOKS += HOST_SYSTEMD_FIX_RPATH
 
